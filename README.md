@@ -1,5 +1,7 @@
 # Telecom AI Support Assistant
 
+[![CI](https://github.com/prakashsridharan/telecom-ai-support-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/prakashsridharan/telecom-ai-support-assistant/actions/workflows/ci.yml)
+
 A portfolio-grade AI customer support application demonstrating **RAG, agentic tool calling, conversation memory, REST APIs, evaluation, and containerized deployment**.
 
 > This is a demo/portfolio project using synthetic telecom data. It is not a production telecom system and contains no real customer information.
@@ -193,24 +195,19 @@ The Docker setup follows the standard containerized FastAPI approach. FastAPI do
 
 ## Deploy to Render
 
-1. Create a GitHub repository and push this project.
-2. In Render, create a new Web Service.
-3. Connect the GitHub repository.
-4. Render will use `render.yaml`, or configure:
-   - Build: `pip install -r requirements.txt`
-   - Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-5. Add `OPENAI_API_KEY` only if you want live LLM mode.
-6. Deploy.
+`render.yaml` is committed as a Blueprint, so the service is defined in the
+repository rather than clicked together in a dashboard.
 
-## GitHub
+1. Sign in to [Render](https://render.com) with GitHub.
+2. **New → Blueprint**, and select this repository.
+3. Apply the proposed service. `autoDeploy` is on, so every push to `main`
+   redeploys.
 
-Suggested repository name:
-
-`telecom-ai-support-assistant`
-
-Suggested description:
-
-> Enterprise-style telecom AI support assistant demonstrating RAG, agentic tool calling, FastAPI, LLM integration and safe customer-support workflows.
+The public demo runs in **demo mode** on purpose: the endpoint is
+unauthenticated and unthrottled, so a live provider key would make it an open,
+billable LLM endpoint. Demo mode exercises retrieval, routing, tool calls and
+refusals in full. See [docs/deployment.md](docs/deployment.md) for the details,
+including free-tier cold starts.
 
 ## Portfolio positioning
 

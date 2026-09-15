@@ -2,9 +2,24 @@ services:
   - type: web
     name: telecom-ai-support-assistant
     runtime: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.5"
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_LEVEL
+        value: INFO
+
+      # The public demo runs in demo mode deliberately. The endpoint is
+      # unauthenticated and unthrottled, so a live provider key here would be
+      # an open, billable LLM endpoint. Add the key only behind a rate limit.
       - key: LLM_PROVIDER
         value: demo
       - key: LLM_MODEL
