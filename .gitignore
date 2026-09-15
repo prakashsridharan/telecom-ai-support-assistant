@@ -1,0 +1,13 @@
+# Private engineering brief: requirements, trade-offs and known gaps.
+# Kept local deliberately, not part of the public repo.
+CLAUDE.md
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+.DS_Store
+.idea/
+.vscode/
+*.log

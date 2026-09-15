@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telecom AI Support Assistant</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; margin: 0; background: #f5f7fb; color: #172033; }
+    .container { max-width: 980px; margin: 0 auto; padding: 28px 18px; }
+    .header { margin-bottom: 18px; }
+    .header h1 { margin-bottom: 6px; }
+    .header p { color: #667085; }
+    .card { background: white; border-radius: 14px; box-shadow: 0 5px 24px rgba(16,24,40,.08); overflow: hidden; }
+    #chat { height: 520px; overflow-y: auto; padding: 22px; }
+    .msg { margin: 12px 0; display: flex; }
+    .msg.user { justify-content: flex-end; }
+    .bubble { max-width: 76%; padding: 12px 15px; border-radius: 14px; line-height: 1.5; white-space: pre-wrap; }
+    .user .bubble { background: #172033; color: white; }
+    .assistant .bubble { background: #eef2f7; }
+    .meta { font-size: 12px; color: #667085; margin-top: 6px; }
+    .input-row { display: flex; gap: 10px; border-top: 1px solid #e5e7eb; padding: 14px; }
+    input { flex: 1; border: 1px solid #d0d5dd; border-radius: 10px; padding: 13px; font-size: 15px; }
+    button { border: 0; border-radius: 10px; padding: 0 20px; background: #172033; color: white; cursor: pointer; }
+    .examples { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+    .example { background: white; border: 1px solid #d0d5dd; color: #344054; padding: 8px 12px; border-radius: 999px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Telecom AI Support Assistant</h1>
+    <p>RAG + agentic tools + enterprise API integration demo</p>
+  </div>
+
+  <div class="examples">
+    <button class="example" onclick="ask('What plans do you offer?')">Plans</button>
+    <button class="example" onclick="ask('How much does the Premium plan cost?')">Premium pricing</button>
+    <button class="example" onclick="ask('Check order ORD-10234')">Order status</button>
+    <button class="example" onclick="ask('Is there an outage in Chennai?')">Service status</button>
+  </div>
+
+  <div class="card">
+    <div id="chat"></div>
+    <div class="input-row">
+      <input id="message" placeholder="Ask a telecom support question..." onkeydown="if(event.key==='Enter') send()">
+      <button onclick="send()">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let history = [];
+
+function addMessage(role, text, meta='') {
+  const chat = document.getElementById('chat');
+  const row = document.createElement('div');
+  row.className = 'msg ' + role;
+  row.innerHTML = `<div><div class="bubble"></div><div class="meta"></div></div>`;
+  row.querySelector('.bubble').textContent = text;
+  row.querySelector('.meta').textContent = meta;
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function send() {
+  const input = document.getElementById('message');
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = '';
+  addMessage('user', message);
+  history.push({role:'user', content:message});
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({message, history})
+    });
+    const data = await response.json();
+    const meta = `Intent: ${data.intent} | Mode: ${data.mode}` +
+      (data.tool_calls.length ? ` | Tools: ${data.tool_calls.join(', ')}` : '') +
+      (data.sources.length ? ` | Sources: ${data.sources.join(', ')}` : '');
+    addMessage('assistant', data.answer, meta);
+    history.push({role:'assistant', content:data.answer});
+  } catch (e) {
+    addMessage('assistant', 'Sorry, the service could not process the request.');
+  }
+}
+
+function ask(text) {
+  document.getElementById('message').value = text;
+  send();
+}
+
+addMessage('assistant', 'Hello! I can answer telecom questions, check demo orders, inspect billing status, and check service status.');
+</script>
+</body>
+</html>

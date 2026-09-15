@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unit tests
+        run: pytest -q
+
+      # The golden set gates the build: routing, retrieval ranking, grounding
+      # and the anti-fabrication rules all have to hold before a merge.
+      - name: Golden-set evaluation
+        run: python -m evals.run_eval --min-pass 1.0
+
+      - name: Build container image
+        run: docker build -t telecom-ai-support .
