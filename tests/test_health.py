@@ -15,7 +15,9 @@ def test_health_reports_component_readiness():
     body = client.get("/health").json()
     assert body["components"]["retriever"]["status"] == "ok"
     assert "4 knowledge documents" in body["components"]["retriever"]["detail"]
-    assert body["mode"] == "demo"
+    assert body["provider"] == "demo"
+    assert body["routing"] == "rules"
+    assert body["components"]["routing"]["status"] == "ok"
 
 
 def test_chat_endpoint_returns_the_decision_trail():
@@ -25,6 +27,8 @@ def test_chat_endpoint_returns_the_decision_trail():
     assert body["intent"] == "order_status"
     assert body["tool_calls"] == ["get_order_status"]
     assert body["mode"] == "demo"
+    assert body["routing"] == "rules"
+    assert body["provider"] == "demo"
 
 
 def test_chat_endpoint_threads_history():

@@ -8,10 +8,14 @@ A portfolio-grade AI customer support application demonstrating **RAG, agentic t
 
 ## What it demonstrates
 
+- **Pluggable model providers** — Claude, OpenAI, or a keyless demo responder,
+  behind one interface no application code imports a vendor SDK through
+- **Real tool calling** — the model receives tool schemas and decides what to
+  call, with a bounded loop, or the application routes by rules; both drive the
+  same tools and return the same response envelope
 - Retrieval-Augmented Generation (RAG) over a small telecom knowledge base,
   ranked by TF-IDF cosine similarity with a relevance floor
 - LLM-powered response generation, with graceful degradation when the provider fails
-- Tool/agent routing for order, billing and service-status queries
 - Multi-turn conversation context: follow-up turns inherit intent and identifiers
 - Safe fallback when the system lacks sufficient information
 - A golden-set evaluation harness scoring routing, retrieval, grounding and safety
@@ -19,7 +23,8 @@ A portfolio-grade AI customer support application demonstrating **RAG, agentic t
 - Browser chat UI that exposes the decision trail for every answer
 - API documentation through Swagger/OpenAPI
 - Docker containerization
-- 34 unit tests
+- 57 unit tests, including the tool-calling loop exercised through scripted
+  fake provider clients — no API key, no flakiness
 - Readiness health endpoint and structured JSON logging
 
 ## Architecture
@@ -50,12 +55,42 @@ LLM Provider
 Grounded Response
 ```
 
-The application supports two modes:
+## Configuring the model and the routing strategy
 
-1. **Demo mode** (default): deterministic local responses and retrieval. This makes the project runnable without an API key.
-2. **LLM mode**: set `OPENAI_API_KEY` and `LLM_MODEL` to enable live LLM-generated responses.
+Two independent switches. `LLM_PROVIDER` decides **who writes the reply**;
+`ROUTING_MODE` decides **who chooses the tools**.
 
-The provider layer is intentionally isolated so another LLM provider can be added without changing the application architecture.
+```bash
+# Default: no API key needed, fully functional
+LLM_PROVIDER=demo
+ROUTING_MODE=rules
+
+# Claude writes the replies, the application still routes
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-opus-5
+
+# Claude chooses and calls the tools itself — real function calling
+ROUTING_MODE=agent
+```
+
+Swap `anthropic` for `openai` (`OPENAI_API_KEY`, `OPENAI_MODEL`) and everything
+else is unchanged — that is the point of the provider boundary.
+
+A provider named without its API key **degrades to demo mode rather than
+failing to start**, and `/health` reports exactly why. Same for agent mode
+without a tool-capable provider.
+
+| | `ROUTING_MODE=rules` | `ROUTING_MODE=agent` |
+|---|---|---|
+| Who picks the tool | The application, by regex and keyword | The model, by function calling |
+| Deterministic | Yes | No |
+| Needs an API key | No | Yes |
+| Handles unanticipated phrasing | Poorly | Well |
+
+Both strategies call the same functions and return the same envelope, so the
+evaluation harness can score either. Details and trade-offs:
+[docs/providers-and-routing.md](docs/providers-and-routing.md).
 
 ## Project structure
 
@@ -74,7 +109,12 @@ telecom-ai-support-assistant/
 │   │   ├── __init__.py
 │   │   ├── orchestrator.py
 │   │   ├── retriever.py
-│   │   └── llm.py
+│   │   ├── tools.py              provider-neutral tool specs + dispatch
+│   │   └── providers/
+│   │       ├── base.py           ChatProvider contract, prompts
+│   │       ├── demo.py           keyless deterministic responder
+│   │       ├── anthropic_provider.py
+│   │       └── openai_provider.py
 │   ├── tools/
 │   │   ├── __init__.py
 │   │   └── telecom_tools.py
@@ -86,10 +126,13 @@ telecom-ai-support-assistant/
 │   ├── orders.md
 │   └── service_policies.md
 ├── tests/
+│   ├── fakes.py                  scripted provider clients
+│   ├── test_agent_tool_calling.py
 │   ├── test_health.py
-│   ├── test_llm.py
 │   ├── test_orchestrator.py
-│   └── test_retriever.py
+│   ├── test_providers.py
+│   ├── test_retriever.py
+│   └── test_routing_modes.py
 ├── evals/
 │   ├── golden_set.json
 │   └── run_eval.py
@@ -97,7 +140,8 @@ telecom-ai-support-assistant/
 │   ├── architecture.md
 │   ├── conversation-flows.md
 │   ├── deployment.md
-│   └── evaluation.md
+│   ├── evaluation.md
+│   └── providers-and-routing.md
 ├── .env.example
 ├── .gitignore
 ├── Dockerfile

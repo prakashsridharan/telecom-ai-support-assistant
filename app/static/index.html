@@ -29,7 +29,8 @@
 <div class="container">
   <div class="header">
     <h1>Telecom AI Support Assistant</h1>
-    <p>RAG + agentic tools + enterprise API integration demo</p>
+    <p>RAG + agentic tool calling + enterprise API integration demo</p>
+    <p id="backend" style="font-size:13px"></p>
   </div>
 
   <div class="examples">
@@ -77,7 +78,12 @@ async function send() {
       body: JSON.stringify({message, history})
     });
     const data = await response.json();
-    const meta = `Intent: ${data.intent} | Mode: ${data.mode}` +
+    const who = data.routing === 'agent'
+      ? 'Tools chosen by the model'
+      : 'Tools chosen by rules';
+    const meta = `Intent: ${data.intent} | ${who} | ${data.provider}` +
+      (data.model && data.model !== 'deterministic' ? ` (${data.model})` : '') +
+      ` | Mode: ${data.mode}` +
       (data.tool_calls.length ? ` | Tools: ${data.tool_calls.join(', ')}` : '') +
       (data.sources.length ? ` | Sources: ${data.sources.join(', ')}` : '');
     addMessage('assistant', data.answer, meta);
@@ -93,6 +99,17 @@ function ask(text) {
 }
 
 addMessage('assistant', 'Hello! I can answer telecom questions, check demo orders, inspect billing status, and check service status.');
+
+// Show which backend is actually serving, so the demo never misrepresents
+// itself as running a model when it is in demo mode.
+fetch('/health').then(r => r.json()).then(h => {
+  const model = h.model && h.model !== 'deterministic' ? ` · ${h.model}` : '';
+  const routing = h.routing === 'agent'
+    ? 'model-driven tool calling'
+    : 'rule-based routing';
+  document.getElementById('backend').textContent =
+    `Backend: ${h.provider}${model} · ${routing}`;
+}).catch(() => {});
 </script>
 </body>
 </html>

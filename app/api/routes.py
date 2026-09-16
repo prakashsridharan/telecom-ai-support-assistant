@@ -12,6 +12,7 @@ from app.models import (
     HealthResponse,
 )
 from app.services.orchestrator import Orchestrator
+from app.services.providers import provider_status
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +24,12 @@ orchestrator = Orchestrator()
 def health():
     """Readiness, not just liveness.
 
-    Reports whether the knowledge base actually loaded and which generation
-    path is active, so a deployment with a missing knowledge_base/ directory or
-    a silently-ignored API key is visible without opening the chat UI.
+    Reports whether the knowledge base loaded, which model backend is active,
+    and which routing strategy will actually run — so a deployment with a
+    missing knowledge_base/ directory, a silently-ignored API key, or agent
+    mode quietly degraded to rules is visible without opening the chat UI.
     """
     retriever = orchestrator.retriever
-    llm = orchestrator.llm
-
     components = {}
 
     if retriever.is_ready:
@@ -43,19 +43,22 @@ def health():
             detail=f"No knowledge documents found in {retriever.knowledge_dir}",
         )
 
-    if llm.enabled:
-        components["llm"] = ComponentHealth(
-            status="ok", detail=f"Provider mode using {settings.llm_model}"
-        )
-    elif settings.llm_provider.lower() == "openai":
-        # Configured for a provider but unusable: a real misconfiguration.
-        components["llm"] = ComponentHealth(
-            status="degraded",
-            detail="LLM_PROVIDER is 'openai' but OPENAI_API_KEY is not set",
+    llm_status, llm_detail = provider_status()
+    components["llm"] = ComponentHealth(status=llm_status, detail=llm_detail)
+
+    requested_routing = settings.routing_mode.lower()
+    effective_routing = orchestrator.routing_mode
+    if requested_routing == effective_routing:
+        components["routing"] = ComponentHealth(
+            status="ok", detail=f"Routing mode '{effective_routing}'"
         )
     else:
-        components["llm"] = ComponentHealth(
-            status="ok", detail="Demo mode; no LLM provider configured"
+        components["routing"] = ComponentHealth(
+            status="degraded",
+            detail=(
+                f"Routing mode '{requested_routing}' requested but the active "
+                f"provider cannot call tools; using '{effective_routing}'"
+            ),
         )
 
     statuses = {c.status for c in components.values()}
@@ -68,7 +71,9 @@ def health():
     return HealthResponse(
         status=overall,
         environment=settings.environment,
-        mode="llm" if llm.enabled else "demo",
+        provider=orchestrator.llm.name,
+        model=orchestrator.llm.model,
+        routing=effective_routing,
         components=components,
     )
 
@@ -96,6 +101,9 @@ def chat(request: ChatRequest):
             "request_id": request_id,
             "intent": result["intent"],
             "mode": result["mode"],
+            "routing": result["routing"],
+            "provider": result["provider"],
+            "model": result["model"],
             "tool_calls": result["tool_calls"],
             "sources": result["sources"],
             "latency_ms": elapsed_ms,

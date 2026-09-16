@@ -4,8 +4,13 @@ from typing import Sequence
 
 from app.config import settings
 from app.models import ChatMessage
-from app.services.llm import CONTEXT_SEPARATOR, LLMResult, LLMService
+from app.services.providers import (
+    CONTEXT_SEPARATOR,
+    LLMResult,
+    build_provider,
+)
 from app.services.retriever import KnowledgeRetriever
+from app.services.tools import ToolBox
 from app.tools.telecom_tools import (
     get_billing_status,
     get_order_status,
@@ -64,9 +69,39 @@ _KNOWLEDGE_TOPICS = re.compile(
 
 
 class Orchestrator:
-    def __init__(self):
+    """Decides how a request gets answered, and by what evidence.
+
+    Two strategies, selected by `ROUTING_MODE`:
+
+    - **rules** — this class classifies the message and calls at most one tool.
+      Deterministic and fully inspectable; the only strategy that works without
+      an API key.
+    - **agent** — the provider is handed the tool schemas and decides for
+      itself what to call. Real function calling.
+
+    Both produce the same response envelope, so the API contract, the UI and
+    the evaluation harness do not care which ran.
+    """
+
+    def __init__(self, provider=None):
         self.retriever = KnowledgeRetriever()
-        self.llm = LLMService()
+        self.toolbox = ToolBox(self.retriever)
+        self.llm = provider or build_provider()
+
+    @property
+    def routing_mode(self) -> str:
+        """The strategy that will actually run.
+
+        `agent` silently degrades to `rules` when the configured provider
+        cannot call tools — the demo provider, or any provider that fell back
+        for a missing key.
+        """
+        if (
+            settings.routing_mode.lower() == "agent"
+            and self.llm.supports_tool_calling
+        ):
+            return "agent"
+        return "rules"
 
     # ------------------------------------------------------------------
     # Conversation helpers
@@ -190,12 +225,13 @@ class Orchestrator:
     # Response assembly
     # ------------------------------------------------------------------
 
-    @staticmethod
     def _envelope(
+        self,
         result: LLMResult,
         intent: str,
         sources: list[str],
         tool_calls: list[str],
+        routing: str = "rules",
     ) -> dict:
         return {
             "answer": result.text,
@@ -203,6 +239,9 @@ class Orchestrator:
             "sources": sources,
             "tool_calls": tool_calls,
             "mode": result.mode,
+            "routing": routing,
+            "provider": self.llm.name,
+            "model": self.llm.model,
         }
 
     @staticmethod
@@ -250,6 +289,35 @@ class Orchestrator:
         self,
         message: str,
         history: Sequence[ChatMessage] | None = None,
+    ) -> dict:
+        if self.routing_mode == "agent":
+            return self._respond_as_agent(message, history)
+        return self._respond_by_rules(message, history)
+
+    def _respond_as_agent(
+        self,
+        message: str,
+        history: Sequence[ChatMessage] | None,
+    ) -> dict:
+        """Hand the tools to the model and let it decide.
+
+        `intent` is still reported, computed by the same classifier, but it is
+        an observation rather than a routing decision — it makes the two
+        strategies comparable in the evaluation harness.
+        """
+        result = self.llm.run_agent(message, history, self.toolbox)
+        return self._envelope(
+            result,
+            self.classify(message, history),
+            result.sources,
+            result.tool_calls,
+            routing="agent",
+        )
+
+    def _respond_by_rules(
+        self,
+        message: str,
+        history: Sequence[ChatMessage] | None,
     ) -> dict:
         intent = self.classify(message, history)
 

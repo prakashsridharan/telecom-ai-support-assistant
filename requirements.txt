@@ -4,5 +4,10 @@ pydantic>=2.7,<3.0
 pydantic-settings>=2.3,<3.0
 python-dotenv>=1.0,<2.0
 httpx>=0.27,<1.0
+
+# Model providers. Both are optional at runtime: with LLM_PROVIDER=demo the
+# app never constructs either client.
+anthropic>=1.5,<2.0
 openai>=1.40,<3.0
+
 pytest>=8.0,<9.0
